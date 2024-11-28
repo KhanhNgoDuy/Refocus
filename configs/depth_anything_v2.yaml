@@ -1,0 +1,22 @@
+# Config file of Depth-Anything-V2
+
+
+pred-only: True
+grayscale: True
+input_size: 518
+encoder: 'vitb'
+checkpoint: 'Depth-Anything-V2/checkpoints/depth_anything_v2_vitb.pth'
+  
+model_configs:
+  vits:
+    encoder: vits
+    features: 64
+    out_channels: [48, 96, 192, 384]
+  vitb:
+    encoder: vitb
+    features: 128
+    out_channels: [96, 192, 384, 768]
+  vits:
+    encoder: vitl
+    features: 256
+    out_channels: [256, 512, 1024, 1024]
