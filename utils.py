@@ -17,6 +17,20 @@ def create_gaussian_kernel(sigma):
     return np.flip(kernel)
 
 
+def create_soft_coc_kernel(radius, falloff=2.0):
+    if radius <= 0:
+        raise ValueError("Radius must be positive.")
+    if falloff <= 0:
+        raise ValueError("Falloff must be positive.")
+    
+    size = int(2 * radius + 1)
+    y, x = np.ogrid[-radius : radius, -radius : radius] # min = 3
+    distance = np.sqrt(x**2 + y**2)
+    kernel = np.maximum(0, 1 - (distance / radius)**falloff)
+    kernel /= kernel.sum()
+    return kernel
+
+
 # def padding(input_img, kernel_size):
 #     kh, kw = kernel_size
 #     ph = kh // 2

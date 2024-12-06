@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import argparse
 from PyQt5.QtCore import pyqtSignal, QThread, pyqtSlot, Qt, QPoint
 from PyQt5.QtGui import QImage, QPixmap, QPainter, QColor, QPen
 from PyQt5.QtWidgets import QLabel, QMainWindow, QApplication, QPushButton
@@ -10,13 +11,13 @@ from thread_image import ImageThread
 # from thread_blur import ImageProcessingThread
 from thread_depthanything import get_depth
 from click_label import ClickLabel
-from utils import create_gaussian_kernel
+from utils import create_gaussian_kernel, create_soft_coc_kernel
 
 
 class MainWindow(QMainWindow):
     image_ready = pyqtSignal(np.ndarray)
 
-    def __init__(self, path='images/whale.jpg'):
+    def __init__(self, path, f_num, kernel_t):
         super().__init__()
 
         # Set up UI
@@ -40,8 +41,9 @@ class MainWindow(QMainWindow):
         self.setFixedHeight(H)
 
         # Create attributes
-        self.f_num = 2
+        self.f_num = f_num
         self.offset_point = QPoint(0, 0)
+        self.kernel_type= kernel_t
 
         # Connect the label's clicked signal
         self.label.clicked.connect(self.handle_label_click)
@@ -55,7 +57,7 @@ class MainWindow(QMainWindow):
         depth_masks = self.depth_binning(self.image_depth, num_bins=8)
         # end_depth_binning = pc()
         # start_adaptive_blur = pc()
-        blurred_image = self.adaptive_blur(self.image, depth_masks, self.f_num, self.offset_point).astype(np.uint8)
+        blurred_image = self.adaptive_blur(depth_masks).astype(np.uint8)
         # end_adaptive_blur = pc()
         # start_display_image = pc()
         self.display_image(blurred_image)
@@ -85,20 +87,28 @@ class MainWindow(QMainWindow):
 
         self.label.setPixmap(pixmap)
     
-    def adaptive_blur(self, color_image, depth_masks, f_number, user_sl_point):
-        assert 1 < f_number <= 22, "Invalid f-number"
-        user_sl_point = (user_sl_point.y(), user_sl_point.x())
-        final_img = np.zeros(shape=color_image.shape)
+    def adaptive_blur(self, depth_masks):
+        assert 1 < self.f_num <= 22, "Invalid f-number"
+        user_sl_point = (self.offset_point.y(), self.offset_point.x())
+        final_img = np.zeros(shape=self.image.shape)
         usr_mask = self.get_user_select_mask_index(user_sl_point, depth_masks)
         
         for i, mask in enumerate(depth_masks):
             mask_3ch = np.dstack([mask] * 3)
             if usr_mask == i:
-                final_img += color_image * mask_3ch.astype(np.uint8)
+                final_img += self.image * mask_3ch.astype(np.uint8)
             else:
-                sigma = 3 * np.abs(usr_mask - i) / f_number
-                kernel = create_gaussian_kernel(sigma)
-                blur_image = cv2.filter2D(src=color_image, ddepth=-1, kernel=kernel)
+                ###3 These number are assumptions
+                if self.kernel_type == 'gaussian':
+                    sigma = 3 * np.abs(usr_mask - i) / self.f_num
+                    kernel = create_gaussian_kernel(sigma)
+                elif self.kernel_type == 'coc':
+                    coc_radius = 3 + 2 * int(np.abs(usr_mask -i) / self.f_num)
+                    c = 4.0
+                    kernel = create_soft_coc_kernel(coc_radius, falloff=c)
+                else:
+                    raise NotImplementedError(f"Unknown kernel type {self.kernel_type}")
+                blur_image = cv2.filter2D(src=self.image, ddepth=-1, kernel=kernel)
                 final_img += blur_image * mask_3ch.astype(np.uint8)
         return final_img
 
@@ -119,7 +129,12 @@ class MainWindow(QMainWindow):
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--img_path', type=str, required=True, help='Path to image to be refocused')
+    parser.add_argument('--F', type=float, required=True, help='Desired F-number')
+    parser.add_argument('--kernel', type=str,choices=['gaussian', 'coc'], default='coc', help='Kernel type')
+    args = parser.parse_args()
     app = QApplication([])
-    window = MainWindow()
+    window = MainWindow(args.img_path, args.F, args.kernel)
     window.show()
     app.exec_()
