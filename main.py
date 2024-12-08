@@ -91,7 +91,7 @@ class MainWindow(QMainWindow):
         final_img = np.zeros(shape=self.image.shape)
         usr_mask = self.get_user_select_mask_index(user_sl_point, depth_masks)
         min_d, max_d = self.image_depth.min(), self.image_depth.max()
-        m = 0.02 ###3 dirty, to be defined
+        m = 0.05 ###3 dirty, to be defined
         max_blur_radius = m * min(self.image.shape[:2])
         
         for i, mask in enumerate(depth_masks):
@@ -105,11 +105,11 @@ class MainWindow(QMainWindow):
                 scaled_delta_depth = (delta_depth - min_d) / (max_d - min_d)
 
                 if self.kernel_type == 'gaussian':
-                    kernel_size = scaled_delta_depth * 2 * max_blur_radius
+                    kernel_size = (scaled_delta_depth * 2 * max_blur_radius) / self.f_num
                     kernel_size = kernel_size + 1 if kernel_size % 2 == 0 else kernel_size
                     kernel = create_gaussian_kernel(kernel_size)
                 elif self.kernel_type == 'coc':
-                    coc_radius = scaled_delta_depth * max_blur_radius
+                    coc_radius = (scaled_delta_depth * max_blur_radius) / self.f_num 
                     # scale the max radius according to difference in depth value
                     c = 4.0 
                     kernel = create_soft_coc_kernel(coc_radius, falloff=c)
