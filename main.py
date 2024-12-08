@@ -24,7 +24,6 @@ class MainWindow(QMainWindow):
         self.ui = loadUi('new.ui', self)
         self.label = self.findChild(ClickLabel, "label")
 
-        path = 'images/nguyen.png'        
         self.image = cv2.imread(path)
         self.image = cv2.cvtColor(self.image, cv2.COLOR_BGR2RGB)
         
@@ -32,7 +31,6 @@ class MainWindow(QMainWindow):
         H, W = 512, 1024
         self.image = cv2.resize(self.image, (W, H))
         
-        # path_depth = 'images/nguyen_depth.png'
         # self.image_depth = cv2.imread(path_depth, cv2.IMREAD_GRAYSCALE)
         self.image_depth = get_depth(path)
         self.image_depth = cv2.resize(self.image_depth, (W, H))
