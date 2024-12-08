@@ -52,7 +52,7 @@ class MainWindow(QMainWindow):
         # start_sum = pc()
         self.offset_point = pos + QPoint(0, 28)  # bug
         # start_depth_binning = pc()
-        depth_masks = self.depth_binning(self.image_depth, num_bins=8)
+        depth_masks = self.depth_binning(self.image_depth, num_bins=16)
         # end_depth_binning = pc()
         # start_adaptive_blur = pc()
         blurred_image = self.adaptive_blur(depth_masks).astype(np.uint8)
@@ -90,19 +90,28 @@ class MainWindow(QMainWindow):
         user_sl_point = (self.offset_point.y(), self.offset_point.x())
         final_img = np.zeros(shape=self.image.shape)
         usr_mask = self.get_user_select_mask_index(user_sl_point, depth_masks)
+        min_d, max_d = self.image_depth.min(), self.image_depth.max()
+        m = 0.05 ###3 dirty, to be defined
+        max_blur_radius = m * min(self.image.shape[:2])
         
         for i, mask in enumerate(depth_masks):
             mask_3ch = np.dstack([mask] * 3)
             if usr_mask == i:
                 final_img += self.image * mask_3ch.astype(np.uint8)
             else:
-                ###3 These number are assumptions
+                focused_plane_depth = self.image_depth[depth_masks[usr_mask]].mean()
+                mask_depth = self.image_depth[mask].mean()
+                delta_depth = abs(focused_plane_depth - mask_depth)
+                scaled_delta_depth = (delta_depth - min_d) / (max_d - min_d)
+
                 if self.kernel_type == 'gaussian':
-                    sigma = 3 * np.abs(usr_mask - i) / self.f_num
-                    kernel = create_gaussian_kernel(sigma)
+                    kernel_size = (scaled_delta_depth * 2 * max_blur_radius) / self.f_num
+                    kernel_size = kernel_size + 1 if kernel_size % 2 == 0 else kernel_size
+                    kernel = create_gaussian_kernel(kernel_size)
                 elif self.kernel_type == 'coc':
-                    coc_radius = 3 + 2 * int(np.abs(usr_mask -i) / self.f_num)
-                    c = 4.0
+                    coc_radius = (scaled_delta_depth * max_blur_radius) / self.f_num 
+                    # scale the max radius according to difference in depth value
+                    c = 4.0 
                     kernel = create_soft_coc_kernel(coc_radius, falloff=c)
                 else:
                     raise NotImplementedError(f"Unknown kernel type {self.kernel_type}")
@@ -112,7 +121,7 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def depth_binning(img_d, num_bins):
-        min_intensity, max_intensity = 0, 256
+        min_intensity, max_intensity = img_d.min(), img_d.max()
         bin_edges = np.linspace(min_intensity, max_intensity, num_bins + 1)
         masks = [np.logical_and(img_d >= bin_edges[i], img_d < bin_edges[i + 1]) for i in range(num_bins)]
         return masks

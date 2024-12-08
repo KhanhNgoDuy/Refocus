@@ -1,9 +1,9 @@
 import numpy as np
+import math
 
 
-def create_gaussian_kernel(sigma):
-    kernel_size = int(6 * sigma)
-    kernel_size = kernel_size + 1 if kernel_size % 2 == 0 else kernel_size
+def create_gaussian_kernel(kernel_size):
+    sigma = kernel_size / 7.0
     kernel = np.zeros(shape=(kernel_size, kernel_size), dtype=np.float32)
     M = np.array([[sigma**2, 0], [0, sigma**2]])
     u = np.array([[kernel_size//2], [kernel_size//2]])
@@ -23,8 +23,8 @@ def create_soft_coc_kernel(radius, falloff=2.0):
     if falloff <= 0:
         raise ValueError("Falloff must be positive.")
     
-    size = int(2 * radius + 1)
-    y, x = np.ogrid[-radius : radius, -radius : radius] # min = 3
+    side = (int(2 * math.ceil(radius) + 1)) // 2
+    y, x = np.ogrid[-side : side, -side : side]
     distance = np.sqrt(x**2 + y**2)
     kernel = np.maximum(0, 1 - (distance / radius)**falloff)
     kernel /= kernel.sum()
