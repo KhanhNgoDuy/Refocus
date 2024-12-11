@@ -5,9 +5,9 @@ from PyQt5.QtGui import QImage, QPixmap, QPainter, QColor, QPen
 from PyQt5.QtWidgets import QLabel, QMainWindow, QApplication, QPushButton
 from PyQt5.uic import loadUi
 from time import perf_counter as pc, sleep
+from huggingface_hub import from_pretrained_keras
+import tensorflow as tf
 
-from thread_image import ImageThread
-# from thread_blur import ImageProcessingThread
 from thread_depthanything import get_depth
 from click_label import ClickLabel
 from utils import create_gaussian_kernel
@@ -45,6 +45,14 @@ class MainWindow(QMainWindow):
 
         # Connect the label's clicked signal
         self.label.clicked.connect(self.handle_label_click)
+    
+    @staticmethod
+    def deblur(image):
+        image = tf.convert_to_tensor(image)
+        image = tf.image.resize(image, (256, 256))
+        model = from_pretrained_keras("google/maxim-s3-deblurring-reds")
+        predictions = model.predict(tf.expand_dims(image, 0))
+        return predictions
 
     @pyqtSlot(QPoint)
     def handle_label_click(self, pos):
