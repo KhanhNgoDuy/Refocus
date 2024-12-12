@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>800</width>
-    <height>600</height>
+    <width>1088</width>
+    <height>894</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -30,16 +30,23 @@
       <item>
        <layout class="QVBoxLayout" name="verticalLayout_4">
         <item>
-         <widget class="QSlider" name="horizontalSlider_2">
+         <widget class="QSlider" name="slider_src">
           <property name="orientation">
            <enum>Qt::Horizontal</enum>
           </property>
          </widget>
         </item>
         <item>
-         <widget class="QSlider" name="horizontalSlider">
+         <widget class="QSlider" name="slider_tgt">
           <property name="orientation">
            <enum>Qt::Horizontal</enum>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="button_save">
+          <property name="text">
+           <string>Save Image</string>
           </property>
          </widget>
         </item>

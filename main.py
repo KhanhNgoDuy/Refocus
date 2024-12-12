@@ -3,7 +3,7 @@ import numpy as np
 import argparse
 from PyQt5.QtCore import pyqtSignal, QThread, pyqtSlot, Qt, QPoint
 from PyQt5.QtGui import QImage, QPixmap, QPainter, QColor, QPen
-from PyQt5.QtWidgets import QLabel, QMainWindow, QApplication, QPushButton
+from PyQt5.QtWidgets import QLabel, QMainWindow, QApplication, QPushButton, QSlider
 from PyQt5.uic import loadUi
 from time import perf_counter as pc, sleep
 import math
@@ -23,17 +23,23 @@ class MainWindow(QMainWindow):
         # Set up UI
         self.ui = loadUi('new.ui', self)
         self.label = self.findChild(ClickLabel, "label")
+        # self.slider_src = self.findChild(QSlider, "slider_src")
+        self.slider_tgt = self.findChild(QSlider, "slider_tgt")
+        self.button_save = self.findChild(QPushButton, "button_save")
 
         self.image = cv2.imread(path)
         self.image = cv2.cvtColor(self.image, cv2.COLOR_BGR2RGB)
         
         H, W, C = self.image.shape
-        # H, W = 512, 1024
-        # self.image = cv2.resize(self.image, (W, H))
+        fixed_res = 756
+        res = max(H, W)
+        scale = fixed_res / res
+        H, W = int(H*scale), int(W*scale)
+        self.image = cv2.resize(self.image, (W, H))
         
         # self.image_depth = cv2.imread(path_depth, cv2.IMREAD_GRAYSCALE)
         self.image_depth = get_depth(path)
-        # self.image_depth = cv2.resize(self.image_depth, (W, H))
+        self.image_depth = cv2.resize(self.image_depth, (W, H))
 
         self.setFixedWidth(W)
         self.setFixedHeight(H)
@@ -41,36 +47,62 @@ class MainWindow(QMainWindow):
         # Create attributes
         self.f_num = f_num
         self.offset_point = QPoint(0, 0)
-        self.kernel_type= kernel_t
+        self.kernel_type = kernel_t
         self.display_image(self.image)
+        self.current_image = self.image
+
+        # Define non-linear value mappings for the sliders
+        self.slider_values = [1.8, 2.0, 2.2, 2.5, 2.8, 3.2, 4.0, 4.5, 5.0, 5.6, 6.3, 7.1, 8.0, 9.0, 10.0, 11.0, 13.0, 16.0]
+
+        # Configure sliders
+        # self.configure_slider(self.slider_src, self.slider_values, self.update_src_label)
+        self.configure_slider(self.slider_tgt, self.slider_values, self.update_tgt_label)
 
         # Connect the label's clicked signal
         self.label.clicked.connect(self.handle_label_click)
+        self.button_save.clicked.connect(self.save_image)
+
+    def configure_slider(self, slider, value_list, update_function):
+        slider.setMinimum(0)
+        slider.setMaximum(len(value_list) - 1)
+        slider.setTickPosition(QSlider.TicksBelow)
+        slider.setTickInterval(1)
+        slider.valueChanged.connect(lambda val: update_function(val, value_list))
+
+    # def update_src_label(self, value, value_list):
+    #     mapped_value = value_list[value]
+    #     print(f"Source slider value: {mapped_value}")
+
+    def update_tgt_label(self, value, value_list):
+        mapped_value = value_list[value]
+        print(f"Changed target f-number to: {mapped_value}")
+        self.f_num = mapped_value
+        self.update_image()
 
     @pyqtSlot(QPoint)
     def handle_label_click(self, pos):
         """Handle the click on the label and trigger adaptive blur."""
-        # start_sum = pc()
         self.offset_point = pos + QPoint(0, 28)  # bug
-        # start_depth_binning = pc()
+        self.update_image()
+
+    def save_image(self):
+        """Save the currently displayed image."""
+        save_path = f"out_{self.f_num}_{self.offset_point.x(), self.offset_point.y()}.png"
+        rgb_image = cv2.cvtColor(self.current_image, cv2.COLOR_RGB2BGR)
+        
+        cv2.imwrite(save_path, rgb_image)
+        print(f"Image saved at {save_path}")
+
+    def update_image(self):
         depth_masks = self.depth_binning(self.image_depth, num_bins=16)
-        # end_depth_binning = pc()
-        # start_adaptive_blur = pc()
         blurred_image = self.adaptive_blur(depth_masks).astype(np.uint8)
-        # end_adaptive_blur = pc()
-        # start_display_image = pc()
         self.display_image(blurred_image)
-        # end_display_image = pc()
-        # end_sum = pc()
-        # print("Sum: ", end_sum - start_sum)
-        # print("depth_binning: ", end_depth_binning - start_depth_binning)
-        # print("adaptive_blur: ", end_adaptive_blur - start_adaptive_blur)
-        # print("display_image: ", end_display_image - start_display_image)
 
     def display_image(self, rgb_image):
         """Convert and display an RGB image on the label."""
         self.image_ready.emit(rgb_image)
         # print(f"RGB: {rgb_image.shape}")
+        self.current_image = rgb_image
         h, w, ch = rgb_image.shape
         bytes_per_line = ch * w
         qt_image = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
@@ -85,7 +117,6 @@ class MainWindow(QMainWindow):
         painter.end()
 
         self.label.setPixmap(pixmap)
-    
     
     def adaptive_blur(self, depth_masks):
         assert 1 < self.f_num <= 22, "Invalid f-number"

@@ -2,6 +2,7 @@ __pycache__/
 .idea/
 thread_blur.py
 __test.py
+__test.ipynb
 sandbox/
 data/
 Diffusion/unet_last.pt

@@ -2,9 +2,7 @@ from transformers import pipeline
 from PIL import Image
 import matplotlib.pyplot as plt
 import numpy as np
-from functools import lru_cache
 
-@lru_cache
 def get_depth(image_path):
     # modelname = "depth-anything/Depth-Anything-V2-Small-hf"
     # modelname = "depth-anything/Depth-Anything-V2-Base-hf"
