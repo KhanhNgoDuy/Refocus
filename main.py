@@ -27,13 +27,13 @@ class MainWindow(QMainWindow):
         self.image = cv2.imread(path)
         self.image = cv2.cvtColor(self.image, cv2.COLOR_BGR2RGB)
         
-        # H, W, C = self.image.shape
-        H, W = 512, 1024
-        self.image = cv2.resize(self.image, (W, H))
+        H, W, C = self.image.shape
+        # H, W = 512, 1024
+        # self.image = cv2.resize(self.image, (W, H))
         
         # self.image_depth = cv2.imread(path_depth, cv2.IMREAD_GRAYSCALE)
         self.image_depth = get_depth(path)
-        self.image_depth = cv2.resize(self.image_depth, (W, H))
+        # self.image_depth = cv2.resize(self.image_depth, (W, H))
 
         self.setFixedWidth(W)
         self.setFixedHeight(H)
@@ -53,7 +53,7 @@ class MainWindow(QMainWindow):
         # start_sum = pc()
         self.offset_point = pos + QPoint(0, 28)  # bug
         # start_depth_binning = pc()
-        depth_masks = self.depth_binning(self.image_depth, num_bins=16)
+        depth_masks = self.depth_binning(self.image_depth, num_bins=8)
         # end_depth_binning = pc()
         # start_adaptive_blur = pc()
         blurred_image = self.adaptive_blur(depth_masks).astype(np.uint8)
@@ -92,32 +92,58 @@ class MainWindow(QMainWindow):
         final_img = np.zeros(shape=self.image.shape)
         usr_mask = self.get_user_select_mask_index(user_sl_point, depth_masks)
         min_d, max_d = self.image_depth.min(), self.image_depth.max()
-        m = 0.05 ###3 dirty, to be defined
-        max_blur_radius = m * min(self.image.shape[:2])
+        
+        def get_real_depth(d):
+            # Convert depth to meters (1-50m range) # tuned
+            return 1 + (d - min_d) * (50) / (max_d - min_d)
+        
+        f = 0.035  # focal length in meters (35mm)
+        N = self.f_num
         
         for i, mask in enumerate(depth_masks):
             mask_3ch = np.dstack([mask] * 3)
             if usr_mask == i:
                 final_img += self.image * mask_3ch.astype(np.uint8)
             else:
-                focused_plane_depth = self.image_depth[depth_masks[usr_mask]].mean()
-                mask_depth = self.image_depth[mask].mean()
-                delta_depth = abs(focused_plane_depth - mask_depth)
-                scaled_delta_depth = (delta_depth - min_d) / (max_d - min_d)
+                # Get real depth values in meters
+                p = get_real_depth(self.image_depth[depth_masks[usr_mask]].mean())  # Focus plane
+                d = get_real_depth(self.image_depth[mask].mean())  # off-focus plane to be blurred
 
-                if self.kernel_type == 'gaussian':
-                    kernel_size = (scaled_delta_depth * 2 * max_blur_radius) / self.f_num
-                    kernel_size = kernel_size + 1 if kernel_size % 2 == 0 else kernel_size
-                    kernel = create_gaussian_kernel(kernel_size)
-                elif self.kernel_type == 'coc':
-                    coc_radius = (scaled_delta_depth * max_blur_radius) / self.f_num 
-                    # scale the max radius according to difference in depth value
-                    c = 4.0 
-                    kernel = create_soft_coc_kernel(coc_radius, falloff=c)
+                # Equation: CoC = ||(f/N) * (f*(p-d))/(d*(p-f))||
+
+                numerator = (f * f * abs(p - d))
+                denominator = (d * (p - f))
+                CoC = abs((f/N) * (numerator / denominator))
+                
+                if self.kernel_type == 'coc':
+                    # CoC calculation in meters
+                    
+                    sensor_width = 0.036  # blind guess
+                    image_width = self.image.shape[1]  # pixels
+                    pixels_per_meter = image_width / sensor_width
+                    
+                    scaling_factor = 150  # constant scaling term
+                    CoC_pixels = CoC * pixels_per_meter * scaling_factor
+                    
+                    print(f"Depth p: {p:.2f}m, d: {d:.2f}m, raw CoC: {CoC_pixels:.2f}px")
+                    
+                    # Clamp kernel size to reasonable values
+                    min_kernel = 3
+                    max_kernel = 100
+                    CoC_pixels = np.clip(CoC_pixels, min_kernel, max_kernel)
+                    
+                    radius = CoC_pixels / 2
+                    c = 4.0  # falloff parameter
+                    kernel = create_soft_coc_kernel(radius, falloff=c)
+                    
                 else:
-                    raise NotImplementedError(f"Unknown kernel type {self.kernel_type}")
+                    kernel_size = int(CoC) 
+                    kernel_size = max(3, kernel_size if kernel_size % 2 == 1 else kernel_size + 1)
+                    kernel = create_gaussian_kernel(kernel_size)
+                
                 blur_image = cv2.filter2D(src=self.image, ddepth=-1, kernel=kernel)
                 final_img += blur_image * mask_3ch.astype(np.uint8)
+        
         return final_img
 
     @staticmethod

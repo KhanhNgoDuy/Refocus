@@ -24,7 +24,7 @@ def create_soft_coc_kernel(radius, falloff=2.0):
         raise ValueError("Falloff must be positive.")
     
     side = (int(2 * math.ceil(radius) + 1)) // 2
-    y, x = np.ogrid[-side : side, -side : side]
+    y, x = np.ogrid[-side : side+1, -side : side+1]
     distance = np.sqrt(x**2 + y**2)
     kernel = np.maximum(0, 1 - (distance / radius)**falloff)
     kernel /= kernel.sum()
