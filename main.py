@@ -6,12 +6,12 @@ from PyQt5.QtGui import QImage, QPixmap, QPainter, QColor, QPen
 from PyQt5.QtWidgets import QLabel, QMainWindow, QApplication, QPushButton
 from PyQt5.uic import loadUi
 from time import perf_counter as pc, sleep
+import math
 
 from thread_image import ImageThread
 # from thread_blur import ImageProcessingThread
 from thread_depthanything import get_depth
 from click_label import ClickLabel
-from utils import create_gaussian_kernel, create_soft_coc_kernel
 
 
 class MainWindow(QMainWindow):
@@ -53,7 +53,7 @@ class MainWindow(QMainWindow):
         # start_sum = pc()
         self.offset_point = pos + QPoint(0, 28)  # bug
         # start_depth_binning = pc()
-        depth_masks = self.depth_binning(self.image_depth, num_bins=8)
+        depth_masks = self.depth_binning(self.image_depth, num_bins=16)
         # end_depth_binning = pc()
         # start_adaptive_blur = pc()
         blurred_image = self.adaptive_blur(depth_masks).astype(np.uint8)
@@ -86,6 +86,7 @@ class MainWindow(QMainWindow):
 
         self.label.setPixmap(pixmap)
     
+    
     def adaptive_blur(self, depth_masks):
         assert 1 < self.f_num <= 22, "Invalid f-number"
         user_sl_point = (self.offset_point.y(), self.offset_point.x())
@@ -94,57 +95,61 @@ class MainWindow(QMainWindow):
         min_d, max_d = self.image_depth.min(), self.image_depth.max()
         
         def get_real_depth(d):
-            # Convert depth to meters (1-50m range) # tuned
             return 1 + (d - min_d) * (50) / (max_d - min_d)
         
         f = 0.035  # focal length in meters (35mm)
         N = self.f_num
+        
+        # Get focus depth once
+        focus_depth = get_real_depth(self.image_depth[depth_masks[usr_mask]].mean())
         
         for i, mask in enumerate(depth_masks):
             mask_3ch = np.dstack([mask] * 3)
             if usr_mask == i:
                 final_img += self.image * mask_3ch.astype(np.uint8)
             else:
-                # Get real depth values in meters
-                p = get_real_depth(self.image_depth[depth_masks[usr_mask]].mean())  # Focus plane
-                d = get_real_depth(self.image_depth[mask].mean())  # off-focus plane to be blurred
-
-                # Equation: CoC = ||(f/N) * (f*(p-d))/(d*(p-f))||
-
-                numerator = (f * f * abs(p - d))
-                denominator = (d * (p - f))
+                current_depth = get_real_depth(self.image_depth[mask].mean())
+                
+                # Calculate CoC as before
+                numerator = (f * f * abs(focus_depth - current_depth))
+                denominator = (current_depth * (focus_depth - f))
                 CoC = abs((f/N) * (numerator / denominator))
                 
                 if self.kernel_type == 'coc':
-                    # CoC calculation in meters
-                    
-                    sensor_width = 0.036  # blind guess
-                    image_width = self.image.shape[1]  # pixels
+                    sensor_width = 0.036
+                    image_width = self.image.shape[1]
                     pixels_per_meter = image_width / sensor_width
-                    
-                    scaling_factor = 150  # constant scaling term
+                    scaling_factor = 66
                     CoC_pixels = CoC * pixels_per_meter * scaling_factor
-                    
-                    print(f"Depth p: {p:.2f}m, d: {d:.2f}m, raw CoC: {CoC_pixels:.2f}px")
-                    
-                    # Clamp kernel size to reasonable values
-                    min_kernel = 3
-                    max_kernel = 100
-                    CoC_pixels = np.clip(CoC_pixels, min_kernel, max_kernel)
-                    
+                    CoC_pixels = np.clip(CoC_pixels, 3, 100)
                     radius = CoC_pixels / 2
-                    c = 4.0  # falloff parameter
-                    kernel = create_soft_coc_kernel(radius, falloff=c)
+                    
+                    # Create bilateral depth kernel
+                    kernel_size = int(2 * math.ceil(radius) + 1)
+                    y, x = np.ogrid[-kernel_size//2:kernel_size//2+1, -kernel_size//2:kernel_size//2+1]
+                    spatial_kernel = np.exp(-(x*x + y*y) / (2 * radius * radius))
+                    
+                    # Add depth component to kernel - this prevents bleeding across depth boundaries
+                    depth_kernel = np.exp(-abs(current_depth - focus_depth) / (2 * radius))
+                    kernel = spatial_kernel * depth_kernel
+                    
+                    # Normalize kernel
+                    kernel = kernel / kernel.sum()
                     
                 else:
-                    kernel_size = int(CoC) 
+                    kernel_size = int(CoC)
                     kernel_size = max(3, kernel_size if kernel_size % 2 == 1 else kernel_size + 1)
                     kernel = create_gaussian_kernel(kernel_size)
                 
+                # Apply blur with bilateral depth kernel
                 blur_image = cv2.filter2D(src=self.image, ddepth=-1, kernel=kernel)
+                
+                # Add bilateral filtering for edge preservation
+                blur_image = cv2.bilateralFilter(blur_image.astype(np.uint8), 9, 75, 75)
+                
                 final_img += blur_image * mask_3ch.astype(np.uint8)
         
-        return final_img
+        return final_img.astype(np.uint8)
 
     @staticmethod
     def depth_binning(img_d, num_bins):
