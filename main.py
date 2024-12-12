@@ -42,6 +42,7 @@ class MainWindow(QMainWindow):
         self.f_num = f_num
         self.offset_point = QPoint(0, 0)
         self.kernel_type= kernel_t
+        self.display_image(self.image)
 
         # Connect the label's clicked signal
         self.label.clicked.connect(self.handle_label_click)
