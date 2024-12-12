@@ -110,36 +110,30 @@ class MainWindow(QMainWindow):
             else:
                 current_depth = get_real_depth(self.image_depth[mask].mean())
                 
-                # Calculate CoC as before
+                # Calculate CoC
                 numerator = (f * f * abs(focus_depth - current_depth))
                 denominator = (current_depth * (focus_depth - f))
                 CoC = abs((f/N) * (numerator / denominator))
                 
-                if self.kernel_type == 'coc':
-                    sensor_width = 0.036
-                    image_width = self.image.shape[1]
-                    pixels_per_meter = image_width / sensor_width
-                    scaling_factor = 66
-                    CoC_pixels = CoC * pixels_per_meter * scaling_factor
-                    CoC_pixels = np.clip(CoC_pixels, 3, 100)
-                    radius = CoC_pixels / 2
-                    
-                    # Create bilateral depth kernel
-                    kernel_size = int(2 * math.ceil(radius) + 1)
-                    y, x = np.ogrid[-kernel_size//2:kernel_size//2+1, -kernel_size//2:kernel_size//2+1]
-                    spatial_kernel = np.exp(-(x*x + y*y) / (2 * radius * radius))
-                    
-                    # Add depth component to kernel - this prevents bleeding across depth boundaries
-                    depth_kernel = np.exp(-abs(current_depth - focus_depth) / (2 * radius))
-                    kernel = spatial_kernel * depth_kernel
-                    
-                    # Normalize kernel
-                    kernel = kernel / kernel.sum()
-                    
-                else:
-                    kernel_size = int(CoC)
-                    kernel_size = max(3, kernel_size if kernel_size % 2 == 1 else kernel_size + 1)
-                    kernel = create_gaussian_kernel(kernel_size)
+                sensor_width = 0.036
+                image_width = self.image.shape[1]
+                pixels_per_meter = image_width / sensor_width
+                scaling_factor = 66
+                CoC_pixels = CoC * pixels_per_meter * scaling_factor
+                CoC_pixels = np.clip(CoC_pixels, 3, 100)
+                radius = CoC_pixels / 2
+                
+                # Create bilateral depth kernel
+                kernel_size = int(2 * math.ceil(radius) + 1)
+                y, x = np.ogrid[-kernel_size//2:kernel_size//2+1, -kernel_size//2:kernel_size//2+1]
+                spatial_kernel = np.exp(-(x*x + y*y) / (2 * radius * radius))
+                
+                # Add depth component to kernel - this prevents bleeding across depth boundaries
+                depth_kernel = np.exp(-abs(current_depth - focus_depth) / (2 * radius))
+                kernel = spatial_kernel * depth_kernel
+                
+                # Normalize kernel
+                kernel = kernel / kernel.sum()
                 
                 # Apply blur with bilateral depth kernel
                 blur_image = cv2.filter2D(src=self.image, ddepth=-1, kernel=kernel)
@@ -171,9 +165,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--img_path', type=str, required=True, help='Path to image to be refocused')
     parser.add_argument('--F', type=float, required=True, help='Desired F-number')
-    parser.add_argument('--kernel', type=str,choices=['gaussian', 'coc'], default='coc', help='Kernel type')
     args = parser.parse_args()
     app = QApplication([])
-    window = MainWindow(args.img_path, args.F, args.kernel)
+    window = MainWindow(args.img_path, args.F, 'coc')  # Removed kernel choice
     window.show()
     app.exec_()
