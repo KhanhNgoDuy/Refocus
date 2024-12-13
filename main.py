@@ -56,26 +56,70 @@ class MainWindow(QMainWindow):
         # Define non-linear value mappings for the sliders
         self.slider_values = [1.8, 2.0, 2.2, 2.5, 2.8, 3.2, 4.0, 4.5, 5.0, 5.6, 6.3, 7.1, 8.0, 9.0, 10.0, 11.0, 13.0, 16.0]
 
-        # Configure sliders
-        # self.configure_slider(self.slider_src, self.slider_values, self.update_src_label)
-        self.configure_slider(self.slider_tgt, self.slider_values, self.update_tgt_label)
 
-        # Connect the label's clicked signal
+        # Add F-stop labels
+        self.f_number_label = QLabel(self)
+        self.f_number_label.setAlignment(Qt.AlignCenter)
+        self.f_number_label.setStyleSheet("QLabel { font-size: 11pt; margin-bottom: 5px; }")
+
+        self.setup_slider(self.slider_tgt)
+
         self.label.clicked.connect(self.handle_label_click)
         self.button_save.clicked.connect(self.save_image)
 
-    def configure_slider(self, slider, value_list, update_function):
+    def setup_slider(self, slider):
         slider.setMinimum(0)
-        slider.setMaximum(len(value_list) - 1)
+        slider.setMaximum(len(self.slider_values) - 1)
         slider.setTickPosition(QSlider.TicksBelow)
         slider.setTickInterval(1)
-        slider.valueChanged.connect(lambda val: update_function(val, value_list))
+        slider.setMinimumHeight(45)  # Make room for labels
+        
+        # Find initial index for f_num
+        try:
+            initial_index = self.slider_values.index(self.f_num)
+            slider.setValue(initial_index)
+        except ValueError:
+            slider.setValue(0)
+        
+        # Connect signal
+        slider.valueChanged.connect(self.update_slider_value)
 
-    def update_tgt_label(self, value, value_list):
-        mapped_value = value_list[value]
-        print(f"Changed target f-number to: {mapped_value}")
+    def update_slider_value(self, value):
+        """Update when slider value changes"""
+        mapped_value = self.slider_values[value]
+        self.f_number_label.setText(f"F-number: f/{mapped_value}")
         self.f_num = mapped_value
         self.update_image()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        
+        # Draw F-number labels under the slider ticks
+        if hasattr(self, 'slider_tgt'):
+            painter = QPainter(self)
+            painter.setPen(Qt.black)
+            
+            # Get slider geometry
+            slider_rect = self.slider_tgt.geometry()
+            slider_width = slider_rect.width() - 20  # Account for margins
+            x_offset = slider_rect.x() + 10  # Starting x position
+            
+            # Get save button geometry to avoid overlap
+            save_button_rect = self.button_save.geometry()
+            
+            # Draw labels for every third value
+            for i, value in enumerate(self.slider_values):
+                if i % 3 == 0:  # Show every third value to avoid crowding
+                    # Calculate x position
+                    x_pos = x_offset + (i * slider_width) / (len(self.slider_values) - 1)
+                    # Move labels above the save button
+                    y_pos = save_button_rect.top() - 5
+                    
+                    # Draw text centered on tick mark
+                    text = f"f/{value}"
+                    font_metrics = painter.fontMetrics()
+                    text_width = font_metrics.horizontalAdvance(text)
+                    painter.drawText(int(x_pos - text_width/2), int(y_pos), text)
 
     @pyqtSlot(QPoint)
     def handle_label_click(self, pos):
