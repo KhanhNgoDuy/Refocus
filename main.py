@@ -71,10 +71,6 @@ class MainWindow(QMainWindow):
         slider.setTickInterval(1)
         slider.valueChanged.connect(lambda val: update_function(val, value_list))
 
-    # def update_src_label(self, value, value_list):
-    #     mapped_value = value_list[value]
-    #     print(f"Source slider value: {mapped_value}")
-
     def update_tgt_label(self, value, value_list):
         mapped_value = value_list[value]
         print(f"Changed target f-number to: {mapped_value}")
@@ -131,7 +127,7 @@ class MainWindow(QMainWindow):
         def get_real_depth(d):
             return 1 + (d - min_d) * (50) / (max_d - min_d)
         
-        f = 0.035  # focal length in meters (35mm)
+        f = 0.035  # focal length in meters (35 mm)
         N = self.f_num
         
         # Get focus depth once
@@ -148,34 +144,36 @@ class MainWindow(QMainWindow):
                 numerator = (f * f * abs(focus_depth - current_depth))
                 denominator = (current_depth * (focus_depth - f))
                 CoC = abs((f/N) * (numerator / denominator))
+                CoC = CoC * 2.5
                 
+                # Convert CoC to pixels
                 sensor_width = 0.036
                 image_width = self.image.shape[1]
                 pixels_per_meter = image_width / sensor_width
-                scaling_factor = 66
-                CoC_pixels = CoC * pixels_per_meter * scaling_factor
-                CoC_pixels = np.clip(CoC_pixels, 3, 100)
+                k = 60  # scaling constant
+
+                CoC_pixels = CoC * pixels_per_meter * k
+                CoC_pixels = np.clip(CoC_pixels, 0, 60)
                 radius = CoC_pixels / 2
-                
-                # Create bilateral depth kernel
-                kernel_size = int(2 * math.ceil(radius) + 1)
-                y, x = np.ogrid[-kernel_size//2:kernel_size//2+1, -kernel_size//2:kernel_size//2+1]
-                spatial_kernel = np.exp(-(x*x + y*y) / (2 * radius * radius))
-                
-                # Add depth component to kernel - this prevents bleeding across depth boundaries
-                depth_kernel = np.exp(-abs(current_depth - focus_depth) / (2 * radius))
-                kernel = spatial_kernel * depth_kernel
-                
-                # Normalize kernel
-                kernel = kernel / kernel.sum()
-                
-                # Apply blur with bilateral depth kernel
-                blur_image = cv2.filter2D(src=self.image, ddepth=-1, kernel=kernel)
-                
-                # Add bilateral filtering for edge preservation
-                blur_image = cv2.bilateralFilter(blur_image.astype(np.uint8), 9, 75, 75)
-                
-                final_img += blur_image * mask_3ch.astype(np.uint8)
+
+                # Only create and apply blur if the radius is significant
+                # And the threshold increase with F-stop -> small aparture don't blur
+                threshold = 0.5 * (N/8.0)
+                if radius > threshold:
+                    # Create bilateral depth kernel
+                    kernel_size = int(2 * math.ceil(radius) + 1)
+                    y, x = np.ogrid[-kernel_size//2:kernel_size//2+1, -kernel_size//2:kernel_size//2+1]
+                    spatial_kernel = np.exp(-(x*x + y*y) / (2 * radius * radius))
+                    depth_kernel = np.exp(-abs(current_depth - focus_depth) / (2 * radius))
+                    kernel = spatial_kernel * depth_kernel
+                    kernel = kernel / kernel.sum()
+                    
+                    blur_image = cv2.filter2D(src=self.image, ddepth=-1, kernel=kernel)
+                    blur_image = cv2.bilateralFilter(blur_image.astype(np.uint8), 9, 75, 75)
+                else:
+                    blur_image = self.image
+
+                final_img += blur_image * mask_3ch
         
         return final_img.astype(np.uint8)
 
