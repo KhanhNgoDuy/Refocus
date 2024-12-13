@@ -239,8 +239,8 @@ class MainWindow(QMainWindow):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--img_path', type=str, required=True, help='Path to image to be refocused')
-    parser.add_argument('--F', type=float, required=True, help='Desired F-number')
+    parser.add_argument('--img_path', type=str, default='examples/00_f0.png', help='Path to image to be refocused')
+    parser.add_argument('--F', type=float, default=4.0, help='Desired F-number')
     args = parser.parse_args()
     app = QApplication([])
     window = MainWindow(args.img_path, args.F, 'coc')  # Removed kernel choice
