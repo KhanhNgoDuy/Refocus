@@ -44,4 +44,5 @@ Below is our training pipeline, training data is available at [NTIRE 2023 Bokeh 
 ![](/assets/dm_pipeline_train.png)
 
 **Testing** \
+![](/assets/dm_pipeline_test.png) \
 Our test data is available [here](https://drive.google.com/drive/folders/1BVcK7xJVfLbyX7gItURk33Yo419yBGVa?usp=sharing).
