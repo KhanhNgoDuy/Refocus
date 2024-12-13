@@ -31,6 +31,8 @@ class MainWindow(QMainWindow):
         self.image = cv2.cvtColor(self.image, cv2.COLOR_BGR2RGB)
         
         H, W, C = self.image.shape
+        self.orig_H = H
+        self.orig_W = W
         fixed_res = 756
         res = max(H, W)
         scale = fixed_res / res
@@ -89,8 +91,9 @@ class MainWindow(QMainWindow):
         """Save the currently displayed image."""
         save_path = f"out_{self.f_num}_{self.offset_point.x(), self.offset_point.y()}.png"
         rgb_image = cv2.cvtColor(self.current_image, cv2.COLOR_RGB2BGR)
-        
-        cv2.imwrite(save_path, rgb_image)
+        rgb_orig_size = cv2.resize(rgb_image, (self.orig_W, self.orig_H))
+
+        cv2.imwrite(save_path, rgb_orig_size)
         print(f"Image saved at {save_path}")
 
     def update_image(self):
