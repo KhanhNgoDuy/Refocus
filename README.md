@@ -37,3 +37,11 @@ The physics-based approach leverages the canonical principle in photography: Cir
 
 ### Deep Learning-Based Approach
 Our deep learning-based approach leverages Diffusion Models to learn complex real lens optical effects, which are difficult to model explicitly through physical equations.
+
+**Training** \
+Below is our training pipeline, training data is available at [NTIRE 2023 Bokeh Effect Transformation](https://codalab.lisn.upsaclay.fr/competitions/10229).
+
+![](/assets/dm_pipeline_train.png)
+
+**Testing** \
+Our test data is available [here](https://drive.google.com/drive/folders/1BVcK7xJVfLbyX7gItURk33Yo419yBGVa?usp=sharing).
